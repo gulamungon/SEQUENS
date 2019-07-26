@@ -1,0 +1,2 @@
+This module contains code specific for Tensorflow, such as model definitions
+and wrappers for optimizers.
