@@ -1,0 +1,3 @@
+The modules here are not supposed to depend a specific toolkit, e.g., Tensorflow.
+They contain generic things such as batch generation, things for loading data and
+models.

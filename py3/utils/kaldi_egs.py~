@@ -1,0 +1,15 @@
+
+
+
+
+def load_and_prep_dev_set_tar(egs_dir, nnet3_copy_egs_to_feats):
+    dev_feat_rsp        = "ark:" + nnet3_copy_egs_to_feats + " ark:" + egs_dir + "/valid_egs.1.ark ark:- |"
+    dev_feats_generator = utils.kaldi_io.read_mat_ark(dev_feat_rsp)
+    dev_set             = list(dev_feats_generator)
+    dev_lab             = np.array([int(dev_set[i][0].split("-")[-1]) for i in range(len(dev_set))])
+    dev_feat            = np.vstack([dev_set[i][1][np.newaxis,:,:] for i in range(len(dev_set))])
+    dev_idx             = range(0, dev_feat.shape[0]*(dev_feat.shape[1]+1), dev_feat.shape[1])
+    
+    return dev_lab, dev_feat.reshape(1,-1,dev_feat.shape[2]), dev_idx
+
+
