@@ -419,10 +419,9 @@ def get_train_batch_multi_fkn( it_tr_que, train_function ):
     def train_batch_fkn(lr, batch_count):
                              
         log.info( "Batch count " + str(batch_count) )
-
+        
         [[X, Y, U], bad_tr_files, [tr_feats, tr_idx ], it_batch_nb, it_ctrl_nb]     = it_tr_que.get_batch()
         assert(batch_count == it_batch_nb)
-
         log.debug("Batch size: " + str(tr_feats.shape))
         
         WGT_m = np.ones(Y.shape)/ float(Y.shape[0])

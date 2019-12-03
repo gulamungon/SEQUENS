@@ -52,12 +52,9 @@ log = get_logger()
 
 
 import h5py, os, time
-#from pympler.asizeof import asizeof
+from pympler.asizeof import asizeof
 import sys
-sys.path= sys.path + ['/mnt/matylda6/rohdin/pytel_venv_2.7/venv_20170106/lib/python2.7/site-packages/pympler/']
-from asizeof import asizeof
 import numpy as np
-from pytel.htk import readhtk, readhtk_segment
 import threading
 
 
@@ -65,194 +62,93 @@ import threading
 ########################################################################################
 ### General functions for processing the scp, loading data, etc.
 
-# Check that, ivec, stats, and features exists
-def check_data_exists(ivec_dir, stats_dir, feat_dir, f_name, ivec_suffix=None, stats_suffix=None, feat_suffix=None, stats_clean=False):
-    # The MISSING info is a bit misleading since it will be printed if an earlier check has failed.
-    missing=False
-    if (ivec_dir != None):
-        if (ivec_suffix==None):
-            missing = not (os.path.isfile( ivec_dir + '/' + f_name + '.i.gz' )  or os.path.isfile( ivec_dir + '/' + f_name + '.xvec' ) )
-            if missing:
-                log.info ("MISSING: " + ivec_dir + '/' + f_name + '.i.gz')
-        else:
-            missing = not os.path.isfile( ivec_dir + '/' + f_name + "." + ivec_suffix)
-            if missing:
-                log.info ("MISSING: " + ivec_dir + '/' + f_name + "." + ivec_suffix )
-            
-    if (stats_dir != None):
-        st_f_name = f_name
 
-        if stats_clean:
-            st_f_name = st_f_name.replace("reverb/", "clean/")
-            st_f_name = st_f_name.replace("music/", "clean/")
-            st_f_name = st_f_name.replace("noise/", "clean/")
-            st_f_name = st_f_name.replace("babble/", "clean/")
-            
-        if (stats_suffix==None):                                  
-            missing = missing or not os.path.isfile( stats_dir + '/' + st_f_name + '.h5')
-            if missing:
-                log.info ("MISSING: " + stats_dir + '/' + st_f_name + '.h5')
-        elif (stats_suffix=='fea'):                                  
-            missing = missing or not os.path.isfile( stats_dir + '/' + st_f_name + '.fea')
-            if missing:
-                log.info ("MISSING: " + stats_dir + '/' + st_f_name + '.fea')
-            try:
-                tmp_h = readhtk_segment(stats_dir + '/' + st_f_name + '.fea', 0, 1)[np.newaxis,:,:]
-            except Exception as e:
-                log.info ("Failed readhtk_segment: " + stats_dir + '/' + st_f_name + '.fea')
-                log.info(str(e))
-                mising = True
-        else:
-            missing = missing or not os.path.isfile( stats_dir + '/' + st_f_name + "." + stats_suffix)
-            if missing:
-                log.info ("MISSING: " + stats_dir + '/' + st_f_name + "." + stats_suffix)
-                
-            
-    if (feat_dir != None):
-        if (feat_suffix==None):                                  
-            missing = missing or not os.path.isfile( feat_dir + '/'+ f_name + '.fea' )
-            if missing:
-                log.info ("MISSING: " + feat_dir + '/'+ f_name + '.fea')
-        else:
-            missing = missing or not os.path.isfile( feat_dir + '/'+ f_name +  "." + feats_suffix)
-            if missing:
-                log.info ("MISSING: " + feat_dir + '/'+ f_name +  "." + feats_suffix)
-                
-    return missing
-
+####
 # Gathers speaker info from an scp.
-def get_scp_info(scp, ivec_dir, stats_dir, feat_dir, ivec_suffix=None, stats_suffix=None, feat_suffix=None, stats_clean=False):
+def get_kaldi_scp_info( scp, spk_name_old = [] ):
     
-    print("Processing scp " + scp)
-    utt2file = []
-    spk_ids    = []
+    print("Processing data info in" + scp )
+    utt2file     = []
+    spk_ids      = []
     utt2sideInfo = []
-
+    scpInd       = 0 
+    ark_files    = {}
+    utt2scpInd=[]
+    
     f = open(scp, 'r')
 
-    n_unk     = 0
-    n_missing = 0
-
-    # We will remove missing files. And we may need
-    # to know how to map the remaining files to their
-    # original position in the scp.
-    utt2scpInd=[]
-    scpInd    = 0
-    for line in f:
- 
-        scp_info  = line.rstrip().split("=")    
-        n_scp_col = len(scp_info)
-
-        if ( n_scp_col == 1 ):
-            
-            f_name = scp_info[0]
-            
-            if not check_data_exists( ivec_dir, stats_dir, feat_dir, f_name, ivec_suffix, stats_suffix, feat_suffix, stats_clean ):
-                utt2file.append( f_name )
-                spk_ids.append("unk" + str(n_unk) )
-                n_unk += 1
-                utt2scpInd.append(scpInd)
-            else:
-                n_missing += 1
-
-
-        elif ( n_scp_col == 3 ):
-            f_name = scp_info[1]
-            if not check_data_exists( ivec_dir, stats_dir, feat_dir, f_name, ivec_suffix, stats_suffix, feat_suffix, stats_clean ):
-                spk_ids.append( scp_info[0] )
-                utt2file.append( f_name )
-                utt2sideInfo.append( scp_info[2] )
-
-        else:
-
-            f_name = scp_info[1]
-
-            if not check_data_exists( ivec_dir, stats_dir, feat_dir, f_name, ivec_suffix, stats_suffix, feat_suffix, stats_clean ):
-
-                utt2file.append( f_name )
-                scp_info  = scp_info[0].split(" ")    
-                n_scp_col = len(scp_info)
-
-                utt2scpInd.append(scpInd)
-                if ( n_scp_col == 1 ): 
-                    spk_ids.append( scp_info[0] )
-                else:
-                    spk_ids.append( scp_info[1] )
-
-            else:
-                n_missing += 1
-        scpInd += 1
-    if ( n_missing > 0 ):
-        print("WARNING: A total of " + str(n_missing) + " entries in the scp file with missing data have been skipped")
-
-    if (n_unk > 0):
-        print("WARNING: A total of " + str(n_unk) + " files did not have a speaker ID (excluding files with missing data).")
-        print("         These files have been given a unique ID each.")
-
-    f.close()
-
-
-    [ spk_name, utt2spk, spk_counts ] = np.unique( spk_ids, return_inverse=True, return_counts=True )
-    print("Processed " + str(scpInd) + " scp entries")
-    print("Found " + str(len(utt2spk)) +  " utterances and " + str(len(spk_name)) + " speakers (including utterances with missing speaker ID)")
- 
-    scp_info = { 'spk_name' : spk_name, 'utt2spk' : utt2spk, 
-                 'spk_counts' : spk_counts, 'utt2file' : utt2file, 
-                 'utt2scpInd' : utt2scpInd, 'utt2sideInfo' : utt2sideInfo }
-    return scp_info
-
-
-# Gathers speaker info from an scp.
-def get_scp_info_master(scp, ivec_dir, stats_dir, feat_dir, ivec_suffix="embd_A"):
-    
-    print("Processing scp " + scp)
-    utt2file = []
-    spk_ids    = []
-    utt2sideInfo = []
-
-    f = open(scp, 'r')
-
-    n_unk     = 0
-    n_missing = 0
-
-    # We will remove missing files. And we may need
-    # to know how to map the remaining files to their
-    # original position in the scp.
-    utt2scpInd=[]
-    scpInd    = 0
     for line in f:
  
         scp_info  = line.rstrip().split(" ")    
         n_scp_col = len(scp_info)
 
-        f_name = scp_info[14]
+        spk_id = scp_info[0]
+        f_id   = scp_info[1]   # Not using this
+        f_name = scp_info[2]  
         
-        if not check_data_exists( ivec_dir, stats_dir, feat_dir, f_name, ivec_suffix=ivec_suffix):
-            utt2file.append( f_name )
-            spk_ids.append( scp_info[1] )
+        spk_ids.append( spk_id ) 
+        utt2file.append( f_name )
 
-        else:
-            n_missing += 1
-            
+        if ( len(scp_info) ==4 ):
+            s = scp_info[3].split(":")
+            utt2sideInfo.append( [int(ss) for ss in s] )
+
+        ark_files[ f_name.split(":")[0] ] = 1
+        utt2scpInd.append(scpInd)
+   
         scpInd += 1
-    if ( n_missing > 0 ):
-        print("WARNING: A total of " + str(n_missing) + " entries in the scp file with missing data have been skipped")
 
-    if (n_unk > 0):
-        print("WARNING: A total of " + str(n_unk) + " files did not have a speaker ID (excluding files with missing data).")
-        print("         These files have been given a unique ID each.")
+    n_ark_not_found = 0
+    for k in ark_files.keys():
+        if ( not os.path.isfile( k ) ):
+            log.warning( "WARNING: %s doesn't exist", k )
+            n_ark_not_found += 1 
+
+    if ( n_ark_not_found > 0 ):
+        log.warning("WARNING: A total of ark files were not found." %  str( n_ark_not_found ) )
 
     f.close()
 
+    
+    if (len(spk_name_old) == 0):
+        [ spk_name, utt2spk, spk_counts ] = np.unique( spk_ids, return_inverse=True, return_counts=True )
+    else:
+        log.info("Using OLD spkID_2_spk_name")
+        [ spk_name_tmp, utt2spk, spk_counts_tmp ] = np.unique( spk_ids, return_inverse=True, return_counts=True )
 
-    [ spk_name, utt2spk, spk_counts ] = np.unique( spk_ids, return_inverse=True, return_counts=True )
+        log.info( "#spk in this scp: %d", len(spk_name_tmp) )
+        log.info( "#spk in old scp: %d", len(spk_name_old) )
+        
+        spk_name_to_spk_id_old = {}
+        for i,n in enumerate( spk_name_old ):
+            spk_name_to_spk_id_old[n]=i
+
+            
+        new_spk_to_old_spk = [spk_name_to_spk_id_old[n] for n in spk_name_tmp] 
+        spk_name = spk_name_old
+                                     
+        for i in range(len(utt2spk)):
+            utt2spk[i] = new_spk_to_old_spk[ utt2spk[i] ]
+
+        spk_counts = np.zeros( len(spk_name_old) )
+        for i in range(len( spk_counts_tmp )):            
+            spk_counts[ new_spk_to_old_spk[i] ] = spk_counts_tmp[i]
+
+        assert(np.sum(spk_counts) == np.sum(spk_counts_tmp) )
+
+        log.info("#utts: %d", len(utt2spk) )
+        log.info("Min spk id: %d, Max spk id: %d" % (np.min(utt2spk), np.max(utt2spk)))
     print("Processed " + str(scpInd) + " scp entries")
-    print("Found " + str(len(utt2spk)) +  " utterances and " + str(len(spk_name)) + " speakers (including utterances with missing speaker ID)")
- 
+    print("Found " + str(len(utt2spk)) +  " utterances and " + str(len(spk_name)) + " speakers.")
+
+    # Create the scp info dictionary. Note that other scripts may produce and additional entry
+    # called 'utt2scpInd'. See comment there. 
     scp_info = { 'spk_name' : spk_name, 'utt2spk' : utt2spk, 
                  'spk_counts' : spk_counts, 'utt2file' : utt2file, 
                  'utt2scpInd' : utt2scpInd, 'utt2sideInfo' : utt2sideInfo }
+    
     return scp_info
+###
 
 
 
@@ -290,109 +186,7 @@ def load_stats(stats_dir, files, stats_order):
         return [stats]
 
 
-# This function is copied from Keras (downloaded 20170106)
-def pad_sequences(sequences, maxlen=None, dtype='int32',
-                  padding='pre', truncating='pre', value=0.):
-    '''Pads each sequence to the same length:
-    the length of the longest sequence.
 
-    If maxlen is provided, any sequence longer
-    than maxlen is truncated to maxlen.
-    Truncation happens off either the beginning (default) or
-    the end of the sequence.
-
-    Supports post-padding and pre-padding (default).
-
-    # Arguments
-        sequences: list of lists where each element is a sequence
-        maxlen: int, maximum length
-        dtype: type to cast the resulting sequence.
-        padding: 'pre' or 'post', pad either before or after each sequence.
-        truncating: 'pre' or 'post', remove values from sequences larger than
-            maxlen either in the beginning or in the end of the sequence
-        value: float, value to pad the sequences to the desired value.
-
-    # Returns
-        x: numpy array with dimensions (number_of_sequences, maxlen)
-    '''
-    lengths = [len(s) for s in sequences]
-
-    nb_samples = len(sequences)
-    if maxlen is None:
-        maxlen = np.max(lengths)
-
-    # take the sample shape from the first non empty sequence
-    # checking for consistency in the main loop below.
-    sample_shape = tuple()
-    for s in sequences:
-        if len(s) > 0:
-            sample_shape = np.asarray(s).shape[1:]
-            break
-
-    x = (np.ones((nb_samples, maxlen) + sample_shape) * value).astype(dtype)
-    for idx, s in enumerate(sequences):
-        if len(s) == 0:
-            continue  # empty list was found
-        if truncating == 'pre':
-            trunc = s[-maxlen:]
-        elif truncating == 'post':
-            trunc = s[:maxlen]
-        else:
-            raise ValueError('Truncating type "%s" not understood' % truncating)
-
-        # check `trunc` has expected shape
-        trunc = np.asarray(trunc, dtype=dtype)
-        if trunc.shape[1:] != sample_shape:
-            raise ValueError('Shape of sample %s of sequence at position %s is different from expected shape %s' %
-                             (trunc.shape[1:], idx, sample_shape))
-
-        if padding == 'post':
-            x[idx, :len(trunc)] = trunc
-        elif padding == 'pre':
-            x[idx, -len(trunc):] = trunc
-        else:
-            raise ValueError('Padding type "%s" not understood' % padding)
-    return x
-
-
-# Load features. 
-def load_feats(feat_dir, files, max_length, frame_step):           
-    d = [readhtk(feat_dir + '/'+ f + '.fea')[::frame_step,:] for f in files]
-    return  [pad_sequences(d, max_length, dtype=float)]
-
-# Load the data we want
-def load_data(scp_info, ivec_dir, stats_dir, feat_dir, stats_order, max_length, frame_step, output_labs, output_scp_ind, utts):
-
-    utt2file    = scp_info[ 'utt2file' ]
-    files       = [ utt2file[u] for u in utts ]
-    utt2spk     = scp_info[ 'utt2spk' ]
-    utt2scpInd  = scp_info[ 'utt2scpInd' ]
-
-    data = []
-    if (ivec_dir != None):
-        data = data + [ np.vstack( np.loadtxt( ivec_dir+'/'+r+'.i.gz' )[None,:] for r in files) ]
-
-    if (stats_dir != None):
-        data = data + load_stats(stats_dir, files, stats_order)
-
-    if (feat_dir != None): 
-        data = data + load_feats(feat_dir, files, max_length, frame_step)
-
-    output = [data]
-
-    if (output_labs):
-        lab = utt2spk[utts]
-        output += [lab]
-
-    # Append the scp indices for the selected utterances if wanted. 
-    # (Can be used for e.g. looking up trial weigts or 
-    # for obtaining e.g., i-vectors or 0th stats if these
-    # are alreade stored on the GPU)
-    if (output_scp_ind):
-        batch_scp_ind = [utt2scpInd[u] for u in utts]
-        output += [batch_scp_ind] 
-
-    return output
 
 
 
@@ -830,9 +624,21 @@ def gen_mbatch_spk_bal(scp_info, ivec_dir, stats_dir, feat_dir, stats_order,
         
         files = [utt2file[u] for u in utts ]
 ###
-        data  = load_data(scp_info, ivec_dir, stats_dir, feat_dir, stats_order, 
-                      max_length, frame_step, output_labs, output_scp_ind, utts)
-        
+        #data  = load_data(scp_info, ivec_dir, stats_dir, feat_dir, stats_order, 
+        #              max_length, frame_step, output_labs, output_scp_ind, utts)
+
+        data = [[]]
+        if (output_labs):
+            data.append(utt2spk[utts])
+
+        # Append the scp indices for the selected utterances if wanted. 
+        # (Can be used for e.g. looking up trial weigts or 
+        # for obtaining e.g., i-vectors or 0th stats if these
+        # are alreade stored on the GPU)
+        if (output_scp_ind):
+            batch_scp_ind = [utt2scpInd[u] for u in utts]
+            data.append( batch_scp_ind )
+
         if ( output_utt_id ):
             data.append(utts)
 
@@ -1233,3 +1039,135 @@ class batch_iterator_multi_set(object):
         return b[0:5]
     
 
+####
+# This class generates batches from an an iterator like the one above.
+# It creates an additional thread which is used to load data will
+# the training is ongoing. The maximum number of batches it can keep
+# in que is given by "batch_que_length".
+class batch_iterator_2(object):
+
+    def __init__(self, it_tr, load_feats, annoying_train=True, batch_que_length=2, batch_number=0, use_mpi=False, mpi_size=1, mpi_rank=0  ):
+        self.delete           = False
+        self.it_tr            = it_tr
+        self.batch_que_length = batch_que_length
+        self.qued_batches     = []
+        self.batch_number     = batch_number
+        self.use_mpi          = use_mpi
+        self.mpi_size         = mpi_size
+        self.mpi_rank         = mpi_rank
+        self.annoying_train   = annoying_train
+        self.load_feats       = load_feats
+        #self.prep_batches(break_loop=True) # To make sure they are filled from the beginning    
+
+        if (self.batch_que_length > 0 ):
+            self.batch_thread = threading.Thread( target =self.prep_batches )
+            self.batch_thread.daemon = True # This will make the process die if the main process dies I THINK...???
+            self.batch_thread.start()
+        #else:
+        #    self.batch_que_length =1  
+    """    
+    #def __del__(self):
+    #    self.delete = True # This will stop the loop and thus finish the thread
+    #    #time.sleep(5)
+    #    self.batch_thread.join()
+    #    print "Batch iterator thread done"
+    """    
+
+    def prep_batches(self, break_loop=False):
+        while not self.delete:
+            if ( (len(self.qued_batches) < self.batch_que_length) or self.batch_que_length == 0 ):
+                log.debug( "Only " + str( len(self.qued_batches) ) + " batches in the que. Increasing it." )
+
+                # [X, Y, U]  = self.it_tr.next()
+                BB = next(self.it_tr)
+                if len(BB)==3:
+                    [X, Y, U] = BB
+                elif len(BB)==4 :
+                    [X, Y, U, S] = BB
+                else:
+                    log.error("ERROR: Wrong output from iterator")
+                    
+                if isinstance(U, list):
+                    control_nb = U[0][0]
+                else:
+                    control_nb = U[0]
+
+                if self.use_mpi:
+                    # Divede utterances of the batch. Which one this worker will
+                    # process depends on the mpi_rank (process number) of the process.    
+                    N = U.shape[0]       # Total number of files           
+                    job_indices  = np.round(np.linspace(0 , N, self.mpi_size + 1))
+                    start        = int( job_indices[self.mpi_rank] ) 
+                    end          = int( job_indices[self.mpi_rank + 1] ) 
+                    N_this_batch = end - start
+                    X = X[start:end]
+                    Y = Y[start:end]
+                    U = U[start:end]
+                    S = U[start:end]                                   
+                else:
+                    start = 0
+                    end   = len(Y)
+
+                if not self.annoying_train:
+                    [tr_feats, tr_idx ] = self.load_feats( U )
+
+                    bad_utts     = np.where(tr_idx[1:] - tr_idx[0:-1] == 0 )[0] # For tensor input
+                    bad_tr_files = []
+                    if (  len( bad_utts ) > 0 ):
+                        log.info(" Got a one or more zero-length utterances. This should not happen. This utterance will be discarded but this means batch for this speaker might have been suboptimal. Should be fixed Utterance(s): ")
+                        for bu in bad_utts[::-1]:
+                            #log.info( tr_files[bu] )
+                            #bad_tr_files.append(tr_files[bu])
+                            log.info( bu )
+                            bad_tr_files.append( bu )
+
+                            Y = np.delete(Y, bu)
+                            U = np.delete(U, bu)
+                            if len(BB)==4 :
+                                S = np.delete(S, bu)
+                            tr_idx     = np.delete(tr_idx, bu)
+                            # Note of-course, we don't need to remove anything from the tr_feats and tr_feats_o, since 
+                            # obviously no features have been added for the uttereances where there were no features :)
+
+                    self.batch_number += 1
+                    batch = [BB, bad_tr_files, [tr_feats, tr_idx ], self.batch_number, control_nb, start, end]
+                    log.debug("X =" + str(X) + ", Y =" + str(Y[0]) + ", U =" + str(U[0]) )
+                    log.debug("tr_idx= " + str(tr_idx[0]) + ", self.batch_number= " + str(self.batch_number) + ", control_nb= " + str(control_nb) )
+                else:
+                    # This is for tensor input
+                    self.batch_number += 1
+                    tr_feats = self.load_feats( U )
+                    bad_tr_files = []
+                    tr_idx = None
+                    batch = [BB, bad_tr_files, [tr_feats, tr_idx ], self.batch_number, control_nb, start, end]
+
+                log.debug("X =" + str(X) + ", Y =" + str(Y[0]) + ", U =" + str(U[0]) )
+                log.debug("self.batch_number= " + str(self.batch_number) + ", control_nb= " + str(control_nb) )
+                log.debug("self.batch_number= " + str(self.batch_number) + ", control_nb= " + str(control_nb) )
+                self.qued_batches.append( batch )
+                if ( break_loop ):
+                    break
+
+            else:
+                if ( break_loop ):
+                    break
+                time.sleep(1)
+
+    def get_batch(self):
+        # The stuff commented out below may interfere in the other thread that
+        # runs prep_batches. Had problems with this so keep it here as a warning.
+        """
+        if (len( self.qued_batches ) ==0 ):
+            self.prep_batches(break_loop=True)
+        """
+        # This should work though, toghether with the changes above.
+        while(len( self.qued_batches ) ==0 ):
+            if (self.batch_que_length == 0):
+                #print "A"
+                self.prep_batches(break_loop=True)
+            else:
+                time.sleep(1)
+
+        b = self.qued_batches.pop(0)
+        log.info("Will process data %d to %d in batch." % (b[5], b[6]))                            
+        return b[0:5]

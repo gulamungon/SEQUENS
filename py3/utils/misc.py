@@ -1,15 +1,17 @@
 # Functions for
 
 
-import mpi4py
-import mpi4py.MPI # Needed for Anaconda ????
+#import mpi4py
+#import mpi4py.MPI # Needed for Anaconda ????
 import logging
 import os
 import numpy as np
 
+
 def get_logger():
     # Prepare a logger. If we are using MPI, the logger should contain
     # info about which worker the message comes from.
+    """
     mpi_comm = mpi4py.MPI.COMM_WORLD
     mpi_rank = mpi_comm.Get_rank()
     mpi_size = mpi_comm.Get_size()
@@ -22,7 +24,10 @@ def get_logger():
         #logging.basicConfig(format='%(asctime)s %(module)s %(lineno)d:  %(message)s', level=logging.DEBUG)
         logging.basicConfig(format='%(asctime)s:  %(message)s', level=logging.DEBUG)
         log = logging.getLogger(__name__)
-        
+    """
+    logging.basicConfig(format='%(asctime)s:  %(message)s', level=logging.DEBUG)
+    log = logging.getLogger(__name__)
+    
     return log
 
 from utils.misc import get_logger

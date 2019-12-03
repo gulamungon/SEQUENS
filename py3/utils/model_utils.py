@@ -18,7 +18,7 @@ def load_model(load_model_file):
         with h5py.File( load_model_file, 'r', driver='core') as f:
 
             for k in  sorted(list(f.keys()), key=natural_key) :
-                p = k.encode('ascii') 
+                p =k # k.encode('ascii') 
                 m  =re.search('_(\d+)_(\d+)', p)
                 i1 = int(m.group(1))
                 print("loading " + p)            
