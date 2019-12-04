@@ -25,9 +25,9 @@
 
 
 import numpy as np
-#import pytel.htk, os
+import pytel.htk, os
 import os
-#from pytel.htk import readhtk, readhtk_segment
+from pytel.htk import readhtk, readhtk_segment
 import re
 
 from utils.misc import get_logger

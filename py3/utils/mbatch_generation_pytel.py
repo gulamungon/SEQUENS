@@ -57,7 +57,7 @@ import sys
 sys.path= sys.path + ['/mnt/matylda6/rohdin/pytel_venv_2.7/venv_20170106/lib/python2.7/site-packages/pympler/']
 #from asizeof import asizeof
 import numpy as np
-#from pytel.htk import readhtk, readhtk_segment
+from pytel.htk import readhtk, readhtk_segment
 import threading
 
 

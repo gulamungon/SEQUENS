@@ -7,7 +7,7 @@ log = get_logger()
 
 
 def get_eval_info(eval_conditions, list_dir, ivec_dir=None, stats_dir=None, feat_dir=None, ivec_suffix=None, stats_suffix=None, feat_suffix=None):
-    from utils.mbatch_generation import check_data_exists
+    from utils.mbatch_generation_pytel import check_data_exists
     # We can't load the features for all test set so they will be loaded when
     # needed. Here we check whether the features exists.
     # NOTE: This will not deal with multiple enrollment sessions properly
