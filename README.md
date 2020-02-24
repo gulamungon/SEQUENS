@@ -22,28 +22,29 @@ Notes:
 Example usage
 
 Training
-1 Copy py3/scripts/examples/run_train_with_sge.sh to some directory where you want to run the training.
-2 Edit it to fit your environment.
-3 Run it --- it create a file callded qsub.sh
-4 Run: qsub qsub.sh
+1 Copy py3/scripts/examples/run_train_with_sge.sh to some directory where you want to run the training.  
+2 Edit it to fit your environment.  
+3 Run it --- it create a file callded qsub.sh  
+4 Run: qsub qsub.sh  
 
 Testing
-1 Copy py3/scripts/examples/run_eval_with_sge.sh
-2 Edit it to fit your environmet. You need to creat a file some_path/conf/tf_extract.conf which contains
-  the first part of the qsub file to be used, for example something like
+1 Copy py3/scripts/examples/run_eval_with_sge.sh  
+2 Edit it to fit your environmet. You need to creat a file some_path/conf/tf_extract.conf which contains  
+  the first part of the qsub file to be used, for example something like  
 
-\#!/bin/bash
-\#
-\#$ -cwd
-\#$ -S /bin/bash
-\#$ -N extr_xvec
-\#$ -o JOB_DIR/logs/extr_xvec.out
-\#$ -e JOB_DIR/logs/extr_xvec.err
-\#$ -q johan_extr
-cd W_DIR
-source some_path/venvs/py3.6_tf_20191108/bin/activate
-export PYTHONPATH=:some_path/software/kaldi-io-for-python:some_path/SEQUENS/py3//:some_path/SEQUENS/py3//
-export PATH=${PATH}:some_path/kaldi/src/featbin/:some_path/kaldi/src/ivectorbin/
-which python
+\#!/bin/bash  
+\#  
+\#$ -cwd  
+\#$ -S /bin/bash  
+\#$ -N extr_xvec  
+\#$ -o JOB_DIR/logs/extr_xvec.out  
+\#$ -e JOB_DIR/logs/extr_xvec.err  
+\#$ -q johan_extr  
+cd W_DIR  
+source some_path/venvs/py3.6_tf_20191108/bin/activate  
+export PYTHONPATH=:some_path/software/kaldi-io-for-python:some_path/SEQUENS/py3//:some_path/SEQUENS/py3//  
+export PATH=${PATH}:some_path/kaldi/src/featbin/:some_path/kaldi/src/ivectorbin/  
+which python  
 ID=`echo $SGE_TASK_ID | awk '{printf("%04d", $1-1) }'`
-3 Run it. It will submit things to SGE by it self.
+
+3 Run it. It will submit things to SGE by it self.  
