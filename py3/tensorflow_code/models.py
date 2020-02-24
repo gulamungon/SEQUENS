@@ -1152,7 +1152,10 @@ class xvector_residual(object):
         ### Layers after pooling
         embds_=[]
         res_ap_ = []
+        print(len(self.layers_after_pooling))
         for i in range( len(self.layers_after_pooling) ):
+            print(i)
+            print(self.layers_after_pooling[i])
             if (i == self.stop_grad_ap ):
                 log.info("Stopping gradient between between" + str(Y_))
                 Y_ = self.layers_after_pooling[i]( tf.stop_gradient(Y_) ) # Gradiends will be stopped between layer i and i-1 
@@ -1167,10 +1170,16 @@ class xvector_residual(object):
                 
             if isinstance(self.layers_after_pooling[i], tensorflow_code.nn_def.tf_batch_norm_mov_avg):
                 res_ap_.append(Y_)
+        if (len(self.layers_after_pooling)):
+            print("Q#")
+            print(len(res_ap_))
+            print(len(self.residual_ap))
+            for i in range(len(self.residual_ap)):
+                print(i)
+                print(self.residual_ap[i])
 
-        for i in self.residual_ap:
-            log.debug("Adding residual to softmax: " + str(res_ap_[i]) )
-            Y_ += res_ap_[i]
+                log.debug("Adding residual to softmax: " + str(res_ap_[self.residual_ap[i]]) )
+                Y_ += res_ap_[self.residual_ap[i]]
             
         if (len(embds_) >= 2 ):
             embd_A_ = tf.squeeze(embds_[-2], axis=[1], name='embd_A' )

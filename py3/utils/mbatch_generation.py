@@ -69,11 +69,13 @@ def get_kaldi_scp_info( scp, spk_name_old = [] ):
     
     print("Processing data info in" + scp )
     utt2file     = []
+    utt2fid      = []
     spk_ids      = []
     utt2sideInfo = []
     scpInd       = 0 
     ark_files    = {}
-    utt2scpInd=[]
+    utt2scpInd   = []
+    fid2file     = {}   
     
     f = open(scp, 'r')
 
@@ -83,9 +85,12 @@ def get_kaldi_scp_info( scp, spk_name_old = [] ):
         n_scp_col = len(scp_info)
 
         spk_id = scp_info[0]
-        f_id   = scp_info[1]   # Not using this
+        f_id   = scp_info[1]
         f_name = scp_info[2]  
+
+        fid2file[f_id] = f_name
         
+        utt2fid.append(f_id)
         spk_ids.append( spk_id ) 
         utt2file.append( f_name )
 
@@ -145,7 +150,8 @@ def get_kaldi_scp_info( scp, spk_name_old = [] ):
     # called 'utt2scpInd'. See comment there. 
     scp_info = { 'spk_name' : spk_name, 'utt2spk' : utt2spk, 
                  'spk_counts' : spk_counts, 'utt2file' : utt2file, 
-                 'utt2scpInd' : utt2scpInd, 'utt2sideInfo' : utt2sideInfo }
+                 'utt2scpInd' : utt2scpInd, 'utt2sideInfo' : utt2sideInfo,
+                 'utt2fid': utt2fid, 'fid2file':fid2file }
     
     return scp_info
 ###

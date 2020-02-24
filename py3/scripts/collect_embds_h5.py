@@ -3,6 +3,7 @@
 import argparse, h5py, glob, sys, os.path
 import numpy as np
 from utils.misc import get_logger
+import kaldi_io
 
 if ( __name__ == "__main__" ):
 
@@ -26,6 +27,8 @@ if ( __name__ == "__main__" ):
         '-as', '--augmentation_sep', type =str,
         help ='Separator for augmentation following filename. If provided, it will be changed to :. Also, : will be added to the end of file names without augmenation.',
         required =False, default="")
+    parser.add_argument(
+        '-of', '--output_format', type =str, help ='Save as h5 or kaldi archives.', required =False, default="h5")
 
     
     args = parser.parse_args()
@@ -35,6 +38,8 @@ if ( __name__ == "__main__" ):
     scp = args.scp
     name_sep = args.name_sep 
     aug_sep = args.augmentation_sep 
+    out_format = args.output_format
+
     
     log = get_logger()
     
@@ -43,6 +48,7 @@ if ( __name__ == "__main__" ):
     log.info("scp:       " + scp)
     log.info("name_sep:  " + name_sep )
     log.info("aug_sep:   " + aug_sep )
+    log.info("output_format: " + out_format )
 
 
     in_h5_files = sorted(glob.glob(data_dir + "/" + file_name + '.[0-9]*'))
@@ -147,18 +153,35 @@ if ( __name__ == "__main__" ):
         sub_indices = np.array( indices ).astype(int)
         log.info("Found ")
 
-        # Write scp for the subset
-        if ( name_sep == "" ):
-            h5_out = data_dir + "/" + sss + '.h5'
-        else:
-            h5_out = data_dir + "/" + sss.replace("_HZ", "") + '.h5'
-             
-        log.info("Saving h5 file to " + h5_out )
-        with h5py.File(h5_out, 'w', 'core') as f:
-            f.create_dataset('Physical', data=[physical[i].encode('utf-8') for i in indices], dtype=h5py.special_dtype(vlen=str) )
-            f.create_dataset('Data', data=data[sub_indices] )
-            f.create_dataset('Name', data=[physical_2_name[ physical[i] ].encode('utf-8') for i in indices], dtype=h5py.special_dtype(vlen=str) )
+        if ( (out_format == "h5") or (out_format == "both") ):
+            # Write h5 for the subset
+            if ( name_sep == "" ):
+                h5_out = data_dir + "/" + sss + '.h5'
+            else:
+                h5_out = data_dir + "/" + sss.replace("_HZ", "") + '.h5'
 
+            log.info("Saving h5 file to " + h5_out )
+            with h5py.File(h5_out, 'w', 'core') as f:
+                f.create_dataset('Physical', data=[physical[i].encode('utf-8') for i in indices], dtype=h5py.special_dtype(vlen=str) )
+                f.create_dataset('Data', data=data[sub_indices] )
+                f.create_dataset('Name', data=[physical_2_name[ physical[i] ].encode('utf-8') for i in indices], dtype=h5py.special_dtype(vlen=str) )
+                
+        elif ( (out_format == "kaldi") or (out_format == "both") ):
+            # Write h5 for the subset
+            if ( name_sep == "" ):
+                kaldi_ark_out = data_dir + "/" + sss + '.ark'
+            else:
+                kaldi_ark_out = data_dir + "/" + sss.replace("_HZ", "") + '.ark'
+
+            
+            with open(kaldi_ark_out,'wb') as f:
+                for d,k in zip( data[sub_indices], [physical[i] for i in indices] ):
+                    kaldi_io.write_vec_flt(f, d, key=k )
+
+                    
+        else:
+            log.error("ERROR: Wrong out format requested")
+                        
         # Write scp for the subset
         if ( name_sep == "" ):
             scp_out = data_dir + "/" + sss + '.scp'

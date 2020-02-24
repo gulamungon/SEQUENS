@@ -410,3 +410,96 @@ def find_best_model(load_model_prefix):
                 load_old_model = False
 
     return load_old_model, lr_first, load_model_file, best_epoch # Should it be best_epoch + 1 ???
+
+
+def h5_to_kaldi_nnet3(model_file_h5_in, model_file_kaldi_nnet3_out, tdnn_sizes_before_pooling, tdnn_sizes_after_pooling,
+                      activations_before_pooling, activations_after_pooling, do_feat_norm, do_pool_norm):
+    para = load_model( model_file_h5_in)
+    header = "<Nnet3>\n" + \
+    "input-node name=input dim=23\n" + \
+    "component-node name=tdnn1.affine component=tdnn1.affine input=Append(Offset(input, -2), Offset(input, -1), input, Offset(input, 1), Offset(input, 2))\n" + \
+    "component-node name=tdnn1.relu component=tdnn1.relu input=tdnn1.affine\n" + \
+    "component-node name=tdnn1.batchnorm component=tdnn1.batchnorm input=tdnn1.relu\n" + \
+    "component-node name=tdnn2.affine component=tdnn2.affine input=Append(Offset(tdnn1.batchnorm, -2), tdnn1.batchnorm, Offset(tdnn1.batchnorm, 2))\n" + \
+    "component-node name=tdnn2.relu component=tdnn2.relu input=tdnn2.affine\n" + \
+    "component-node name=tdnn2.batchnorm component=tdnn2.batchnorm input=tdnn2.relu\n" + \
+    "component-node name=tdnn3.affine component=tdnn3.affine input=Append(Offset(tdnn2.batchnorm, -3), tdnn2.batchnorm, Offset(tdnn2.batchnorm, 3))\n" + \
+    "component-node name=tdnn3.relu component=tdnn3.relu input=tdnn3.affine\n" + \
+    "component-node name=tdnn3.batchnorm component=tdnn3.batchnorm input=tdnn3.relu\n" + \
+    "component-node name=tdnn4.affine component=tdnn4.affine input=tdnn3.batchnorm\n" + \
+    "component-node name=tdnn4.relu component=tdnn4.relu input=tdnn4.affine\n" + \
+    "component-node name=tdnn4.batchnorm component=tdnn4.batchnorm input=tdnn4.relu\n" + \
+    "component-node name=tdnn5.affine component=tdnn5.affine input=tdnn4.batchnorm\n" + \
+    "component-node name=tdnn5.relu component=tdnn5.relu input=tdnn5.affine\n" + \
+    "component-node name=tdnn5.batchnorm component=tdnn5.batchnorm input=tdnn5.relu\n" + \
+    "component-node name=stats-extraction-0-10000 component=stats-extraction-0-10000 input=tdnn5.batchnorm\n" + \
+    "component-node name=stats-pooling-0-10000 component=stats-pooling-0-10000 input=stats-extraction-0-10000\n" + \
+    "component-node name=tdnn6.affine component=tdnn6.affine input=Round(stats-pooling-0-10000, 1)\n" + \
+    "component-node name=tdnn6.relu component=tdnn6.relu input=tdnn6.affine\n" + \
+    "component-node name=tdnn6.batchnorm component=tdnn6.batchnorm input=tdnn6.relu\n" + \
+    "component-node name=tdnn7.affine component=tdnn7.affine input=tdnn6.batchnorm\n" + \
+    "component-node name=tdnn7.relu component=tdnn7.relu input=tdnn7.affine\n" + \
+    "component-node name=tdnn7.batchnorm component=tdnn7.batchnorm input=tdnn7.relu\n" + \
+    "component-node name=output.affine component=output.affine input=tdnn7.batchnorm\n" + \
+    "component-node name=output.log-softmax component=output.log-softmax input=output.affine\n" + \
+    "output-node name=output input=output.log-softmax objective=linear\n"
+    print(header)
+
+    c_num = 0
+
+    print ("<NumComponents> 25")
+    
+    if feat_norm:
+        #para[0].append( np.zeros([1,1,feat_dim]) )
+        #para[0].append( np.ones([1,1,feat_dim]) )
+        #para[0].append( np.zeros([1,1,feat_dim]) )
+        #para[0].append( np.ones([1,1,feat_dim]) )
+        offset = 2
+    else:
+        offset = 0
+
+    for i in range( n_lay_before_pooling ):
+
+
+        print ("<ComponentName> tdnn%d.affine <NaturalGradientAffineComponent> <MaxChange> 0.75 <LearningRate> 0.0008 <LinearParams>  [" % i)
+        weight = para[ i*4 + offset ]
+        for r in range(weight.shape[0]-1):
+            print (weight[r,:])
+        print (weight[r,-1], end = " ]")
+
+        bias = para[ i*4 +1  + offset ]
+        print ( "<BiasParams>  [", end="" )
+        print (bias, end= " ]" )
+
+        
+        para[0].append( mdl[0][i].T )
+        para[0].append( mdl[1][i] )
+        para[0].append( mdl[2][i][np.newaxis,np.newaxis,:] )
+        para[0].append( mdl[3][i][np.newaxis,np.newaxis,:] )
+        para[0].append( np.zeros_like(mdl[2][i].squeeze() ) )
+        para[0].append( np.ones_like(mdl[3][i].squeeze()) )
+
+        
+
+    pool_size = mdl[1][n_lay_before_pooling-1].shape[0] * 2
+    if pool_norm:
+        para[0].append( np.zeros([1,1,pool_size]) )
+        para[0].append( np.ones([1,1,pool_size]) )
+        para[0].append( np.zeros([1,1,pool_size]) )
+        para[0].append( np.ones([1,1,pool_size]) )
+
+    for i in range( n_lay_after_pooling ):
+
+        para[0].append( mdl[0][n_lay_before_pooling +i ].T )
+        para[0].append( mdl[1][n_lay_before_pooling +i ] ) 
+        para[0].append( mdl[2][n_lay_before_pooling +i ][np.newaxis,np.newaxis,:] )
+        para[0].append( mdl[3][n_lay_before_pooling +i ][np.newaxis,np.newaxis,:] )
+        para[0].append( np.zeros_like(mdl[2][n_lay_before_pooling +i ].squeeze() ) )
+        para[0].append( np.ones_like(mdl[3][n_lay_before_pooling +i ].squeeze()) )
+
+    para[0].append( mdl[0][n_lay_before_pooling + n_lay_after_pooling].T )
+    para[0].append( mdl[1][n_lay_before_pooling + n_lay_after_pooling] )
+    
+    
+    return para
+

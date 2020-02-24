@@ -8,14 +8,14 @@
 
 floatX='float32'
 
-import sys, os, logging, time, logging, h5py, copy, subprocess, pytel.htk, argparse, pickle, re 
+import sys, os, logging, time, logging, h5py, copy, subprocess, argparse, pickle, re 
 import numpy as np
 import tensorflow as tf
 from utils.mbatch_generation import *
-from utils.load_data import *
+#from utils.load_data import *
 from tensorflow_code.load_save import load_tf_model
 from utils.misc import get_logger, extract_embeddings, save_embeddings
-import utils.kaldi_io
+import kaldi_io
 
 
         
@@ -114,18 +114,16 @@ if ( __name__ == "__main__" ):
     
     log.info("Extracting embeddings")
     overlap = window - shift
-    if ( vad_scp != "None/" and  vad_scp != "None//"):
+    if ( vad_scp != "None" ):
         log.info("Will apply VAD to the features.")
-        feat_rsp="ark:"+kaldi_src+"featbin/apply-cmvn-sliding --norm-vars=false --center=true --cmn-window=300 scp:"+scp+" ark:- | "+kaldi_src+"/ivectorbin/select-voiced-frames ark:- scp:"+vad_scp+" ark:- |"
+        feat_rsp="ark:apply-cmvn-sliding --norm-vars=false --center=true --cmn-window=300 scp:"+scp+" ark:- | select-voiced-frames ark:- scp:"+vad_scp+" ark:- |"
+        feats_generator=kaldi_io.read_mat_ark(feat_rsp)
     else:
         log.info("Assuming VAD has already been applied to the features.")
-        feat_rsp="ark:"+kaldi_src+"featbin/apply-cmvn-sliding --norm-vars=false --center=true --cmn-window=300 scp:"+scp+" ark:- |"
-
-        
-
-    feats_generator=utils.kaldi_io.read_mat_ark(feat_rsp)
-
+        feat_rsp="scp:"+scp 
+        feats_generator=kaldi_io.read_mat_scp(feat_rsp)
     
+
     if (n_cores == -1):
         log.info("Using all available cores")
         sess = tf.Session()
@@ -138,7 +136,10 @@ if ( __name__ == "__main__" ):
 
         
     ### --- Set up the model ------------------------------------------ ###
-    saver = tf.train.import_meta_graph(re.sub('-\d+','-0.meta', model))
+    #saver = tf.train.import_meta_graph(re.sub('-\d+','-0.meta', model))
+    model_dir = os.path.dirname( model )
+    model_name = os.path.basename( model )
+    saver = tf.train.import_meta_graph(model_dir + "/" + re.sub('-\d+','-0.meta', model_name))
     graph = tf.get_default_graph()
 
     saver.restore(sess, os.path.relpath(model))   # Due to a bug in TF, path must be relative. Seems to be fixed in later versions of TF.
@@ -186,6 +187,8 @@ if ( __name__ == "__main__" ):
 
                 if (store_option == 'separately'):
                     if (store_format == "htk"):
+                        log.error("HTK format currently not supported.")
+                        sys.exit(-1)
                         for o,v in zip(out, extract_var_name.split(",")):
                             pytel.htk.writehtk(output_dir + f_path + "." + v, o )
 
@@ -205,9 +208,12 @@ if ( __name__ == "__main__" ):
                 elif (store_option == 'concat'):
                     if (store_format == "h5"):
                         log.error("h5 not supported for concatenated embeddings")
-
-                    out = np.hstack(out)
-                    pytel.htk.writehtk(output_dir + f_path + "." + extract_var_name, out )
+                    elif (store_format == "h5"):
+                        log.error("HTK format currently not supported.")
+                        sys.exit(-1)
+                        out = np.hstack(out)
+                        pytel.htk.writehtk(output_dir + f_path + "." + extract_var_name, out )
+                        
                 else:
                     log.error("ERROR: Wrong store option")
 

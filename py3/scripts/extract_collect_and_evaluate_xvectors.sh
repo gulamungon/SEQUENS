@@ -9,6 +9,9 @@ w_dir=`pwd`
 
 tmp_dir=$w_dir
 
+output_dir=${tmp_dir}/output
+mkdir -p $output_dir
+
 model_dir=$1 
 model=$2
 var_to_extract=$3
@@ -47,7 +50,7 @@ if [ "A" == "A" ];then
 
     # Check that feature scp exists
     if [ -e ${w_dir}/plda_feats.scp ];then
-	plda_feats_scp=${w_dir}/plda_feats.scp
+	plda_feats_scp=${w_dir}/plda_feats.scp	
     else
 	echo "ERROR: plda_feats.scp not found"
 	exit -1 
@@ -56,8 +59,10 @@ if [ "A" == "A" ];then
     # Check whether VAD scp exists. If it doesn't exist, VAD will not be applied.
     if [ -e ${w_dir}/plda_vad.scp ];then
 	plda_vad_scp=${w_dir}/plda_vad.scp
+	plda_vad_string="--vad_scp=$plda_vad_scp"
     else
 	echo "WARNING: plda_vad.scp not found. Will not apply VAD."
+	plda_vad_string=""
     fi
 
     # This is to provide some additional info to the extractor, e.g, domain info
@@ -68,10 +73,7 @@ if [ "A" == "A" ];then
     	    side_info_string=${side_info_string}:0
     	fi	
     fi
-   
-    output_dir=${tmp_dir}/output
-    mkdir -p $output_dir
-   
+      
     scp=$plda_scp
 
     job_dir=`pwd`/sge_plda
@@ -86,7 +88,7 @@ if [ "A" == "A" ];then
     split -a 4 -d -n l/$n_splits_plda $plda_feats_scp plda_feats.
     cd ../../
 
-    extract_command="python $SCRIPT_DIR/extract_xvectors_gen_kaldi_input.py --out_dir=$output_dir --vad_scp=$plda_vad_scp --model=$model --scp=$job_dir/splits/plda_feats.\${ID} --window_size=1000000 --shift=1000000 --n_cores=1 --extract=$var_to_extract $side_info_string --store_format=h5 --context=22 > $job_dir/logs/extract_xvectors_gen_kaldi_input.py.\${ID}.log 2>&1"
+    extract_command="python $SCRIPT_DIR/extract_xvectors_gen_kaldi_input.py --out_dir=$output_dir $plda_vad_string --model=$model --scp=$job_dir/splits/plda_feats.\${ID} --window_size=1000000 --shift=1000000 --n_cores=1 --extract=$var_to_extract $side_info_string --store_format=h5 --context=22 > $job_dir/logs/extract_xvectors_gen_kaldi_input.py.\${ID}.log 2>&1"
     
     cat ${conf_dir}/tf_extract.conf | sed "s:JOB_DIR:${job_dir}:" | sed "s:W_DIR:${w_dir}:" > $job_dir/qsub.sh
     echo  $extract_command >> $job_dir/qsub.sh
@@ -109,8 +111,10 @@ if [ "A" == "A" ];then
     # Check whether VAD scp exists. If it doesn't exist, VAD will not be applied.
     if [ -e ${w_dir}/dev_eval_vad.scp ];then
 	dev_eval_vad_scp=${w_dir}/dev_eval_vad.scp
+	dev_eval_vad_string="--vad_scp=$dev_eval_vad_scp"
     else
 	echo "WARNING: dev_eval_vad.scp not found. Will not apply VAD."
+	dev_eval_vad_string=""
     fi
 
     # This is to provide some additional info to the extractor, e.g, domain info
@@ -121,10 +125,7 @@ if [ "A" == "A" ];then
     	    side_info_string=${side_info_string}:0
     	fi	
     fi
-   
-    output_dir=${tmp_dir}/output
-    mkdir -p $output_dir
-   
+      
     scp=$dev_eval_scp
 
     job_dir=`pwd`/sge_dev_eval
@@ -139,7 +140,7 @@ if [ "A" == "A" ];then
     split -a 4 -d -n l/$n_splits_dev_eval $dev_eval_feats_scp dev_eval_feats.
     cd ../../
 
-    extract_command="python $SCRIPT_DIR/extract_xvectors_gen_kaldi_input.py --out_dir=$output_dir --vad_scp=$dev_eval_vad_scp --model=$model --scp=$job_dir/splits/dev_eval_feats.\${ID} --window_size=1000000 --shift=1000000 --n_cores=1 --extract=$var_to_extract $side_info_string --store_format=h5 --context=22 > $job_dir/logs/extract_xvectors_gen_kaldi_input.py.\${ID}.log 2>&1"
+    extract_command="python $SCRIPT_DIR/extract_xvectors_gen_kaldi_input.py --out_dir=$output_dir $dev_eval_vad_string --model=$model --scp=$job_dir/splits/dev_eval_feats.\${ID} --window_size=1000000 --shift=1000000 --n_cores=1 --extract=$var_to_extract $side_info_string --store_format=h5 --context=22 > $job_dir/logs/extract_xvectors_gen_kaldi_input.py.\${ID}.log 2>&1"
     
     cat ${conf_dir}/tf_extract.conf | sed "s:JOB_DIR:${job_dir}:" | sed "s:W_DIR:${w_dir}:" > $job_dir/qsub.sh
     echo  $extract_command >> $job_dir/qsub.sh
@@ -158,32 +159,21 @@ if [ "A" == "A" ];then
     
     mkdir ${tmp_dir}/models ${tmp_dir}/results
 
-    exit
-    # Collect the embeddings to one h5 file
-    echo "python ${SCRIPT_DIR}/collect_embds_h5.py -d ${output_dir} -n plda -s $plda_scp"
-    python ${SCRIPT_DIR}/collect_embds_h5.py -d ${output_dir} -n plda -s /mnt/matylda6/rohdin/expts/lists/sre19_lists/plda_train.scp
+    # Check that list of dev_eval sets  exists
+    if [ -e ${w_dir}/dev_eval_sets.txt ];then
+	dev_eval_sets=$(cat ${w_dir}/dev_eval_sets.txt)
+    else
+	echo "ERROR: dev_eval_sets.txt not found"
+	exit -1 
+    fi
+    collect_embd_dev_eval_command="python3 ${SCRIPT_DIR}/collect_embds_h5.py -d ${output_dir}/ -n dev_eval_feats -of kaldi -s $dev_eval_sets"
+    echo ${collect_embd_dev_eval_command}
+    eval ${collect_embd_dev_eval_command} > collect_embd_dev_eval.log 2>&1
+
+    collect_embd_plda_command="python3 ${SCRIPT_DIR}/collect_embds_h5.py -d ${output_dir}/ -n plda_feats -of kaldi -s plda.scp"
+    echo ${collect_embd_plda_command}
+    eval ${collect_embd_plda_command} > collect_embd_plda.log 2>&1  
     
-    echo "python ${SCRIPT_DIR}/collect_embds_h5.py -d ${output_dir} -n sre18 -s /mnt/matylda6/rohdin/expts/lists/sre19_lists/sre18_dev_cmn2_HZ.enroll.scp,/mnt/matylda6/rohdin/expts/lists/sre19_lists/sre18_dev_cmn2_HZ.test.scp,/mnt/matylda6/rohdin/expts/lists/sre19_lists/sre18_evl_cmn2_HZ.enroll.scp,/mnt/matylda6/rohdin/expts/lists/sre19_lists/sre18_evl_cmn2_HZ.test.scp"
-    python ${SCRIPT_DIR}/collect_embds_h5.py -d ${output_dir} -n sre18
-    -s /mnt/matylda6/rohdin/expts/lists/sre19_lists/sre18_dev_cmn2_HZ.enroll.scp,
-    /mnt/matylda6/rohdin/expts/lists/sre19_lists/sre18_dev_cmn2_HZ.test.scp,
-    /mnt/matylda6/rohdin/expts/lists/sre19_lists/sre18_evl_cmn2_HZ.enroll.scp,
-    /mnt/matylda6/rohdin/expts/lists/sre19_lists/sre18_evl_cmn2_HZ.test.scp,
-    /mnt/matylda6/rohdin/expts/lists/sre19_lists/sre18_cmn2_evl_tst_HZ.enroll.scp,
-    /mnt/matylda6/rohdin/expts/lists/sre19_lists/sre18_cmn2_evl_tst_HZ.test.scp,
-    /mnt/matylda6/rohdin/expts/lists/sre19_lists/sre18_dev_unlabeled_HZ.scp
-
-
-    # python /mnt/matylda6/rohdin/expts/pytel_py3.7/sid_nn/scripts/collect_embds_h5.py -d /mnt/scratch06/tmp/rohdin/sre19/exp_1/expt_init/output/ -n sre18 -s /mnt/matylda6/rohdin/expts/lists/sre19_lists/sre18_dev_cmn2_HZ.enroll.scp,/mnt/matylda6/rohdin/expts/lists/sre19_lists/sre18_dev_cmn2_HZ.test.scp,/mnt/matylda6/rohdin/expts/lists/sre19_lists/sre18_evl_cmn2_HZ.enroll.scp,/mnt/matylda6/rohdin/expts/lists/sre19_lists/sre18_evl_cmn2_HZ.test.scp,/mnt/matylda6/rohdin/expts/lists/sre19_lists/sre18_cmn2_evl_tst_HZ.enroll.scp,/mnt/matylda6/rohdin/expts/lists/sre19_lists/sre18_cmn2_evl_tst_HZ.test.scp
-    # /mnt/matylda6/rohdin/expts/lists/sre19_lists/sre18_dev_unlabeled_HZ.scp
-
-
-    
-    echo "    python $SCRIPT_DIR/evaluate_xvectors_plda_voxceleb.py --work_dir=${out} --lda_dim=150 --eval_conditions=sre18_dev_cmn2_HZ,sre18_evl_cmn2_HZ --key_dir=/mnt/matylda6/rohdin/expts/lists/sre19_lists/ > evaluate_xvectors.log 2>&1 &"
-    python $SCRIPT_DIR/evaluate_xvectors_plda_voxceleb.py --work_dir=${out} --lda_dim=150 --eval_conditions=sre18_dev_cmn2_HZ,sre18_evl_cmn2_HZ,sre18_cmn2_evl_tst_HZ --mean_sets=sre18_dev_unlabeled_HZ --key_dir=/mnt/matylda6/rohdin/expts/lists/sre19_lists/ > evaluate_xvectors.log 2>&1 &	
-    wait
-    echo "cp -r ${out}/results ."
-    cp -r ${out}/results .
 fi
 
 
