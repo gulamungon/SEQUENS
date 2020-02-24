@@ -1,11 +1,11 @@
 # SEQUENS
 
 Various code for speaker recogntion. The main focus is on "sequence summarizing neural networks"
-for speaker recognition and is the result from my post-doc research at BUT 2016-2019. Funded by SoMoPro.
- 
+for speaker recognition and the work started during my post-doc research at BUT 2016-2019. Funded by SoMoPro.
+Many members at Speech@BUT and also Themos Stafylakis at Omilia has contributed to this work. 
+
 Distributed under the Apache license, version 2.0.
 
-Currently I'm only maintaining things in py3.
 
 Notes:
  * The code in py3/tensorflow_code,the scripts "scripts/train_xvector_extractor_*" and "scripts/extract_xvectors_gen_kaldi_input.py" 
