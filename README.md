@@ -30,7 +30,7 @@ Training
 Testing
 1 Copy py3/scripts/examples/run_eval_with_sge.sh
 2 Edit it to fit your environmet. You need to creat a file some_path/conf/tf_extract.conf which contains
-  the first part of the qsub file to be used, for example somethin like
+  the first part of the qsub file to be used, for example something like
 
 #!/bin/bash
 #
