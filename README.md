@@ -32,14 +32,14 @@ Testing
 2 Edit it to fit your environmet. You need to creat a file some_path/conf/tf_extract.conf which contains
   the first part of the qsub file to be used, for example something like
 
-#!/bin/bash
-#
-#$ -cwd
-#$ -S /bin/bash
-#$ -N extr_xvec
-#$ -o JOB_DIR/logs/extr_xvec.out
-#$ -e JOB_DIR/logs/extr_xvec.err
-#$ -q johan_extr
+\#!/bin/bash
+\#
+\#$ -cwd
+\#$ -S /bin/bash
+\#$ -N extr_xvec
+\#$ -o JOB_DIR/logs/extr_xvec.out
+\#$ -e JOB_DIR/logs/extr_xvec.err
+\#$ -q johan_extr
 cd W_DIR
 source some_path/venvs/py3.6_tf_20191108/bin/activate
 export PYTHONPATH=:some_path/software/kaldi-io-for-python:some_path/SEQUENS/py3//:some_path/SEQUENS/py3//
