@@ -9,6 +9,8 @@ import tensorflow as tf
 import tensorflow_code.initializers
 import tensorflow_code.nn_def
 
+from tensorflow_code.functions import tf_reverse_gradient
+
 class xvector_bn_mlt(object):
 
     def __init__(self, session, is_test_p, n_spk, tdnn_sizes_before_pooling=None, tdnn_sizes_after_pooling=None,
@@ -390,7 +392,7 @@ class xvector(object):
                  activations_before_pooling=None, activations_after_pooling=None, pool_function=None, pool_size=None,
                  it_tr_que=None, scp_info=None, load_data_function=None, upd_b_pool=True, upd_a_pool=True,
                  upd_multi=True, do_feat_norm=False, upd_feat_norm=False, do_pool_norm=False, upd_pool_norm=False,
-                 upd_b_pool_spec=[], use_bug=False, floatX='float32', stop_grad_ap =-1):
+                 upd_b_pool_spec=[], use_bug=False, floatX='float32', stop_grad_ap =-1, rev_grad_ap=-1, pool_l_ctx=0, pool_r_ctx=0):
 
         # Perhaps not great to have it here, but layers require it for their get_parameters functions etc.
         # Alternative would be to always pass sessions to these calls or use default session. ... Think about this.
@@ -400,7 +402,9 @@ class xvector(object):
         self.is_test_p = is_test_p
 
         self.stop_grad_ap = stop_grad_ap 
-        
+        self.rev_grad_ap = rev_grad_ap
+        self.pool_l_ctx = pool_l_ctx
+        self.pool_r_ctx = pool_r_ctx
         # Whether to use the buggy initialization
         self.use_bug=use_bug
 
@@ -666,7 +670,7 @@ class xvector(object):
         self.nn_multi_class = tensorflow_code.nn_def.tf_ff_nn(self.session, params_multi_class, floatX=self.floatX )
         
                                               
-    def __call__(self,X1_, C1_, annoying_train):
+    def __call__(self,X1_, C1_, annoying_train, lay_b_pool_return=[], extra_lay_before_b_pool=[], embd_A_idx=-2):
 
         # Will only return what can be returned based on what is initialized.
         # For example, if layer_after_pooling is not initialized, embeddings
@@ -677,21 +681,30 @@ class xvector(object):
         ##########################################################################
         ### Apply pooling and the layers before it.
         #
-        # With annoying_train all utterances are processed in on go before pooling
+        # With annoying_train all utterances are processed in one go before pooling
         # which allows proper batch norm. In testing, we procss them one by one.
         # Training
+        all_lay_before_pool = extra_lay_before_b_pool + self.layers_before_pooling
         if (annoying_train):
             def train_pooling():
                 Z_ =  X1_
-                for j in range(0, len( self.layers_before_pooling ) ):
-                    Z_ = self.layers_before_pooling[j]( Z_ )
-
+                # for j in range(0, len( self.layers_before_pooling ) ):
+                #    Z_ = self.layers_before_pooling[j]( Z_ )
+                for j in range(0, len( all_lay_before_pool ) ):
+                    Z_ = all_lay_before_pool[j]( Z_ )
+                    log.info("Applying %s", str(Z_))
+                    
                 Y_train_ = tensorflow_code.pool_fkns.mean_std(Z_, axes=1)
                 return Y_train_
 
             def test_pooling():
-                nn_pool     = tensorflow_code.nn_def.tf_pool( self.layers_before_pooling, pool_fkn =self.pool_function,
-                                                                    output_size=self.pool_size, floatX=self.floatX )
+                #nn_pool     = tensorflow_code.nn_def.tf_pool( self.layers_before_pooling, pool_fkn =self.pool_function,
+                #                                              output_size=self.pool_size, floatX=self.floatX,
+                #                                              l_ctx=self.pool_l_ctx,r_ctx=self.pool_r_ctx )
+                nn_pool     = tensorflow_code.nn_def.tf_pool( all_lay_before_pool, pool_fkn =self.pool_function,
+                                                              output_size=self.pool_size, floatX=self.floatX,
+                                                              l_ctx=self.pool_l_ctx,r_ctx=self.pool_r_ctx )
+
                 Y_test_ = nn_pool( X1_, C1_ )
                 return Y_test_
 
@@ -702,20 +715,38 @@ class xvector(object):
         # But with this option batch norm will not (yet) work properly in training. Should
         # fixed of-course if batch norm is shown to be useful.
         else:
-            nn_pool     = tensorflow_code.nn_def.tf_pool( self.layers_before_pooling, pool_fkn =self.pool_function,
-                                                                output_size=self.pool_size, loop_swap_memory=True, floatX=self.floatX )
+            #nn_pool     = tensorflow_code.nn_def.tf_pool( self.layers_before_pooling, pool_fkn =self.pool_function,
+            #                                              output_size=self.pool_size, loop_swap_memory=True, floatX=self.floatX,
+            #                                              l_ctx=self.pool_l_ctx, r_ctx=self.pool_r_ctx)
+            nn_pool     = tensorflow_code.nn_def.tf_pool( all_lay_before_pool, pool_fkn =self.pool_function,
+                                                          output_size=self.pool_size, loop_swap_memory=True, floatX=self.floatX,
+                                                          l_ctx=self.pool_l_ctx, r_ctx=self.pool_r_ctx)
             Y_ = nn_pool( X1_, C1_ )       
                                               
         # This variable is for stats in case we want to extract it.                                  
         stat_  = tf.squeeze(Y_, axis=[1], name='stats' )
 
+        b_pool_extra_out_ = []
+        ZE_ =  X1_        
+        for j in range(0, len( self.layers_before_pooling ) ):
+            ZE_ = self.layers_before_pooling[j]( ZE_ )
+            if j in lay_b_pool_return:
+                b_pool_extra_out_.append(ZE_)
+                log.info("Output also %s",  str(ZE_))
+                log.info(ZE_)
+        assert( len(lay_b_pool_return) == len(b_pool_extra_out_) )
+                
         ##########################################################################                                              
         ### Layers after pooling
         embds_=[]
         for i in range( len(self.layers_after_pooling) ):
             if (i == self.stop_grad_ap ):
-                log.info("Stopping gradient between between" + str(Y_))
+                log.info("Stopping gradient between between (any rev here will be ignored)" + str(Y_))
                 Y_ = self.layers_after_pooling[i]( tf.stop_gradient(Y_) ) # Gradiends will be stopped between layer i and i-1 
+                log.info("and " + str(Y_))
+            elif (i == self.rev_grad_ap ):
+                log.info("Reversing gradient between between" + str(Y_))
+                Y_ = self.layers_after_pooling[i](  tf_reverse_gradient(Y_) ) # Gradiends will be stopped between layer i and i-1 
                 log.info("and " + str(Y_))
             else:
                 Y_ = self.layers_after_pooling[i]( Y_ )
@@ -725,7 +756,7 @@ class xvector(object):
                 embds_.append(Y_)
 
         if (len(embds_) >= 2 ):
-            embd_A_ = tf.squeeze(embds_[-2], axis=[1], name='embd_A' )
+            embd_A_ = tf.squeeze(embds_[embd_A_idx], axis=[1], name='embd_A' )
             embd_B_ = tf.squeeze(embds_[-1], axis=[1], name='embd_B' )
         elif (len(embds_) >= 1 ):
             embd_A_ = None
@@ -740,7 +771,11 @@ class xvector(object):
             pred_ = tf.identity(self.nn_multi_class(tf.squeeze( Y_)), name='pred') # The identity is just to add the name.
         else:
             pred_ = None
-        return stat_, embd_A_, embd_B_, pred_ 
+
+        if len(b_pool_extra_out_) > 0:
+            return stat_, embd_A_, embd_B_, pred_, b_pool_extra_out_
+        else:
+            return stat_, embd_A_, embd_B_, pred_ 
 
 
     def get_parameters(self):
