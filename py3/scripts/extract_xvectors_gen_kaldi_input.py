@@ -11,12 +11,18 @@ floatX='float32'
 import sys, os, logging, time, logging, h5py, copy, subprocess, argparse, pickle, re 
 import numpy as np
 import tensorflow as tf
+
 from utils.mbatch_generation import *
 #from utils.load_data import *
 from tensorflow_code.load_save import load_tf_model
 from utils.misc import get_logger, extract_embeddings, save_embeddings
 import kaldi_io
 
+def apply_instance_norm(X):
+    Xs = np.reshape(X,(X.shape[0],X.shape[1]*X.shape[2]))
+    M = np.mean(Xs, axis=1)
+    S = np.std(Xs, axis=1)
+    return (X - M[:,np.newaxis,np.newaxis])/S[:,np.newaxis,np.newaxis]
 
         
 def get_configuration():
@@ -44,49 +50,26 @@ def get_configuration():
     parser.add_argument(
         '-so', '--store_option', type =str, help ='Whether to store different embds from an utterance (e.g. embd_A or embd_B) concatenated or separately [concat,separate]', required =False, default="separately")
     parser.add_argument(
-        '-sf', '--store_format', type =str, help ='Format for storing. htk=one htk file per utterance. h5=one h5 for all utts in the scp',  required =False, default="htk")
+        '-sf', '--store_format', type =str, help ='Format for storing. htk=one htk file per utterance. h5=one h5 for all utts in the scp.',  required =False, default="htk")
     parser.add_argument(
-        '-c', '--context', type =int, help ='Context. Only utterances with more frames than this will be extracted',  required =False, default=22)
-    
+        '-c', '--context', type =int, help ='Context. Only utterances with more frames than this will be extracted.',  required =False, default=22)
+    parser.add_argument(
+        '-a', '--architecture', type =str, help ='Architecture, "tdnn" or "resnet". Affects input format.',  required =False, default="tdnn")
+    parser.add_argument('--use_gpu', dest='use_gpu', default=False, action='store_true')
+    parser.add_argument('--instance_norm', dest='instance_norm', default=False, action='store_true')
     args              = parser.parse_args()
 
     return(args.vad_scp, args.scp, args.out_dir+"/", args.model, args.window_size,
            args.shift, args.n_cores, args.extract, args.side_info, args.store_option,
-           args.store_format, args.context)
+           args.store_format, args.context, args.architecture, args.use_gpu, args.instance_norm)
         
 if ( __name__ == "__main__" ):
 
     kaldi_src = "/mnt/matylda6/rohdin/software/kaldi_20190309/src/"
     
     # Input arguments
-    [vad_scp, scp, output_dir, model, window, shift, n_cores, extract_var_name, side_info, store_option, store_format, context] = get_configuration()
-
-    """
-    vad_scp="/mnt/matylda6/rohdin/expts/runs/x-vec_python_expts/sre19/exp_1/expt_init/sre18_dev_eval_vad.scp"
-    scp="/mnt/matylda6/rohdin/expts/runs/x-vec_python_expts/sre19/exp_1/expt_init/sge_sre18/splits/sre18.0100"
-    output_dir="/mnt/scratch06/tmp/rohdin//sre19/exp_1/expt_init//output"
-    model="/mnt/matylda6/rohdin/expts/runs/x-vec_python_train/sre19/exp_1//output/model-0"
-    window=1000000
-    shift=1000000
-    n_cores=1
-    extract_var_name="embd_A"
-    side_info="None"
-    store_option="separately"
-    store_format="h5"
-    """
-    """ 
-    output_dir="/mnt/scratch06/tmp/rohdin//sre19_adv_adp/sre19_GAN_softmax_large_GAN_Hossein1107_themos/expt_epoch_85//output"
-    vad_scp="/mnt/matylda6/zeinali/kaldi-trunk/egs/sre16/cmn2_2019_fbank/data/plda_train/vad.scp"
-    model="/mnt/matylda4/qstafylakis/expts/runs/x-vec_python_train/sre19_adv_adp/sre19_GAN_softmax_large_GAN_Hossein1107//output/model-85"     scp="/mnt/matylda6/rohdin/expts/runs/x-vec_python_expts/sre19_adv_adp/sre19_GAN_softmax_large_GAN_Hossein1107_themos/expt_epoch_85/sge_plda_train/splits/plda.0000"
-    window=1000000
-    shift=1000000
-    n_cores=1
-    extract_var_name="embd_A"
-    side_info="S1_p:0"
-    store_format="h5"
-    store_option="separately"
-    context=22 
-    """
+    [vad_scp, scp, output_dir, model, window, shift, n_cores, extract_var_name, side_info,
+     store_option, store_format, context, arch, use_gpu, instance_norm] = get_configuration()
 
     
     # Check hostname and cpu info. Will be printed in log below. Cpu info just checks
@@ -110,7 +93,9 @@ if ( __name__ == "__main__" ):
     log.info("store option:   " + store_option)
     log.info("store format:   " + store_format)
     log.info("context:   " + str(context) )
-
+    log.info("architecture:  " + arch )
+    log.info("use_gpu:  " + str(use_gpu) )
+    log.info("instance_norm:  " + str(instance_norm) )
     
     log.info("Extracting embeddings")
     overlap = window - shift
@@ -122,17 +107,28 @@ if ( __name__ == "__main__" ):
         log.info("Assuming VAD has already been applied to the features.")
         feat_rsp="scp:"+scp 
         feats_generator=kaldi_io.read_mat_scp(feat_rsp)
-    
 
-    if (n_cores == -1):
-        log.info("Using all available cores")
-        sess = tf.Session()
+
+    if use_gpu:
+        # Detect which GPU to use
+        command='nvidia-smi --query-gpu=memory.free,memory.total --format=csv |tail -n+2| awk \'BEGIN{FS=" "}{if ($1/$3 > 0.98) print NR-1}\''
+        try:
+            os.environ["CUDA_VISIBLE_DEVICES"] = subprocess.check_output(command, shell=True).decode('utf-8').rsplit('\n')[0]
+            log.info("CUDA_VISIBLE_DEVICES " + os.environ["CUDA_VISIBLE_DEVICES"])
+        except subprocess.CalledProcessError:
+            log.info("No GPU seems to be available")        
+        sess            = tf.Session()
+        
     else:
-        log.info("Using " + str(n_cores) + " cores" )
-        session_conf=tf.ConfigProto(
-            intra_op_parallelism_threads=n_cores,
-            inter_op_parallelism_threads=n_cores)
-        sess = tf.Session(config=session_conf)
+        if (n_cores == -1):
+            log.info("Using all available cores")
+            sess = tf.Session()
+        else:
+            log.info("Using " + str(n_cores) + " cores" )
+            session_conf=tf.ConfigProto(
+                intra_op_parallelism_threads=n_cores,
+                inter_op_parallelism_threads=n_cores)
+            sess = tf.Session(config=session_conf)
 
         
     ### --- Set up the model ------------------------------------------ ###
@@ -144,23 +140,30 @@ if ( __name__ == "__main__" ):
 
     saver.restore(sess, os.path.relpath(model))   # Due to a bug in TF, path must be relative. Seems to be fixed in later versions of TF.
     X1_p             = graph.get_tensor_by_name('X1_p:0')
-    C1_p             = graph.get_tensor_by_name('C1_p:0')
+    if ( arch == "tdnn"):
+        C1_p             = graph.get_tensor_by_name('C1_p:0')
     if ( side_info != "None" ):
         side_info, side_info_value = side_info.split(":")
         S1_p             = graph.get_tensor_by_name(side_info + ':0')
         
     is_test_p        = graph.get_tensor_by_name('is_test_p:0')
-    vars_to_extrct_  = [graph.get_tensor_by_name(v+':0') for v in extract_var_name.split(",") ]
-   
-    
-    ### --- Extract the required embeddings ------------------------ ###
-    if ( side_info != "None" ):
-        log.info("Adding %s to %s for all utterances " % (side_info_value, str(S1_p) ))
-        g  = lambda X1, C1: sess.run(vars_to_extrct_, {X1_p: X1, C1_p:C1, S1_p:np.array([side_info_value]).astype(floatX).reshape(1,1),
-                                                       is_test_p:True})
-    else:
-        g  = lambda X1, C1 : sess.run(vars_to_extrct_, {X1_p: X1, C1_p:C1, is_test_p:True})    
 
+
+    ### --- Extract the required embeddings ------------------------ ###
+    if ( arch == "tdnn"):
+        vars_to_extrct_  = [graph.get_tensor_by_name(v+':0') for v in extract_var_name.split(",") ]
+        if ( side_info != "None" ):
+            log.info("Adding %s to %s for all utterances " % (side_info_value, str(S1_p) ))
+            g  = lambda X1, C1: sess.run(vars_to_extrct_, {X1_p: X1, C1_p:C1, S1_p:np.array([side_info_value]).astype(floatX).reshape(1,1),
+                                                           is_test_p:True})
+        else:
+            g  = lambda X1, C1 : sess.run(vars_to_extrct_, {X1_p: X1, C1_p:C1, is_test_p:True})    
+    elif( arch == "resnet"):
+        vars_to_extrct_  = [graph.get_tensor_by_name('resnet_model/' + v + ':0') for v in extract_var_name.split(",") ]
+        g  = lambda X1, C1: sess.run(vars_to_extrct_, {X1_p: X1[:,:,:,np.newaxis], is_test_p:True})
+    else:
+        raise ("Unsuported architcture %s" % arch)
+        
     data_info = {"f_name":[], "f_path":[]}
 
         
@@ -174,16 +177,21 @@ if ( __name__ == "__main__" ):
         else:
             log.info("Processing: " + f_path + ", sideinfo: " +  side_info +  ", sideinfo_value: " +  side_info_value )
 
-            
-        log.info("# feats: " + str(len(feats)) )
-        try: 
-            if ( len(feats) > context ):
+        n_frames = len(feats)
+        log.info("# feats: " + str(n_frames) )
 
-                idx    = np.arange(0, len(feats)-overlap, shift)
-                if ( len(feats) - idx[-1] > context ): 
-                     idx    = np.append(idx, len(feats)-overlap)
+        feats = feats[np.newaxis,:,:]
+        if instance_norm:
+            feats = apply_instance_norm(feats)
+
+        try: 
+            if ( n_frames > context ):
+
+                idx    = np.arange(0, n_frames-overlap, shift)
+                if ( n_frames - idx[-1] > context ): 
+                     idx    = np.append(idx, n_frames-overlap)
                     
-                out  = g(feats[np.newaxis,:,:], idx)    
+                out  = g(feats, idx)    
 
                 if (store_option == 'separately'):
                     if (store_format == "htk"):

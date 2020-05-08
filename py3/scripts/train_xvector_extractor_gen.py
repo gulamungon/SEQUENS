@@ -222,7 +222,7 @@ if ( __name__ == "__main__" ):
     # Detect which GPU to use
     command='nvidia-smi --query-gpu=memory.free,memory.total --format=csv |tail -n+2| awk \'BEGIN{FS=" "}{if ($1/$3 > 0.98) print NR-1}\''
     try:
-        os.environ["CUDA_VISIBLE_DEVICES"] = subprocess.check_output(command, shell=True).rsplit('\n')[0]
+        os.environ["CUDA_VISIBLE_DEVICES"] = subprocess.check_output(command, shell=True).decode('utf-8').rsplit('\n')[0]
         log.info("CUDA_VISIBLE_DEVICES " + os.environ["CUDA_VISIBLE_DEVICES"])
     except subprocess.CalledProcessError:
         log.info("No GPU seems to be available")        
