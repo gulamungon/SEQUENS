@@ -152,10 +152,8 @@ if ( __name__ == "__main__" ):
                     start.append(rng_f_tr.randint(0,  last_possible_start + 1)[0] )# This means the intervall is [0,last_possible_start + 1) = [0, last_possible_start]
                     end.append(start[-1] + n_sel_samp)
 
-            #print(files)
-            #print(start)
-            #print(end)
-            data = kaldi_io.read_file_segm(files, start, end)
+            ff = [ "xxx {}[{}:{},:]".format( files[i], start[i], end[i] ) for i in range(len(files)) ]
+            data = [ rr[1] for rr in kaldi_io.read_mat_scp(ff) ]
             data = np.stack( data, axis=0 )
             print(data.shape)
             return data
@@ -173,7 +171,8 @@ if ( __name__ == "__main__" ):
         start = [dev_scp_info['utt2sideInfo'][uu][0] for uu in u]
         end   = [dev_scp_info['utt2sideInfo'][uu][1] for uu in u]
         files = [dev_scp_info['utt2file'][uu] for uu in u] 
-        data = kaldi_io.read_file_segm(files, start, end)
+        ff = [ "xxx {}[{}:{},:]".format( files[i], start[i], end[i] ) for i in range(len(files)) ]
+        data = [ rr[1] for rr in kaldi_io.read_mat_scp(ff) ]
         durations = np.array( end ) - np.array( start )
         idx   = np.cumsum( durations )
         idx   = np.insert(idx, 0,0)

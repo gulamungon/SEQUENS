@@ -24,7 +24,8 @@ def load_kaldi_feats_segm_same_dur(rng, files, min_length, max_length, n_avl_sam
             last_possible_start = n_avl_samp[i] - n_sel_samp
             start.append(rng.randint(0,  last_possible_start + 1)[0] )# This means the intervall is [0,last_possible_start + 1) = [0, last_possible_start]
             end.append(start[-1] + n_sel_samp)
-    data = kaldi_io.read_file_segm(files, start, end)
+    ff = [ "xxx {}[{}:{},:]".format( files[i], start[i], end[i] ) for i in range(len(files)) ]
+    data = [ rr[1] for rr in kaldi_io.read_mat_scp(ff) ]
     data = np.stack( data, axis=0 )
     #print(data.shape)
     return data
@@ -51,7 +52,8 @@ def load_kaldi_feats_segm_same_dur_plus_lab(rng, files, min_length, max_length, 
             last_possible_start = n_avl_samp[i] - n_sel_samp
             start.append(rng.randint(0,  last_possible_start + 1)[0] )# This means the intervall is [0,last_possible_start + 1) = [0, last_possible_start]
             end.append(start[-1] + n_sel_samp)
-    data = kaldi_io.read_file_segm(files, start, end)
+    ff = [ "xxx {}[{}:{},:]".format( files[i], start[i], end[i] ) for i in range(len(files)) ]
+    data = [ rr[1] for rr in kaldi_io.read_mat_scp(ff) ]
     data = np.stack( data, axis=0 )
 
     lab = np.array([ l[start[i]:end[i]] for i,l in enumerate(lab)])
