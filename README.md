@@ -1,8 +1,12 @@
 # SEQUENS
 
-Various code for speaker recogntion. The main focus is on "sequence summarizing neural networks"
-for speaker recognition and the work started during my post-doc research at BUT 2016-2019. Funded by SoMoPro.
-Many members at Speech@BUT and also Themos Stafylakis at Omilia has contributed to this work. 
+This repository contains various code for speaker recogntion. The work started with Johan Rohdin's
+post-doc project "SEQUENce Summarizing neural networks for speaker recognitions, SEQUENS, at Brno 
+University of Technology 2016-2019. This code is part of the project that has received funding from 
+the European Union’s Horizon 2020 research and innovation programme under the Marie Skłodowska-Curie
+and it is co-financed by the South Moravian Region under grant agreement No. 665860.
+Sevaral members at Speech@BUT and also Themos Stafylakis at Omilia has contributed to this work. 
+
 
 Distributed under the Apache license, version 2.0.
 
@@ -10,8 +14,9 @@ Distributed under the Apache license, version 2.0.
 Notes:
  * The code in py3/tensorflow_code,the scripts "scripts/train_xvector_extractor_*" and "scripts/extract_xvectors_gen_kaldi_input.py" 
    uses tensorflow. The rest of the code, e.g., things for minibatch creation,  does should not be dependent on any toolkit.
- * The code Relies on Kaldi ( http://kaldi-asr.org/ ) for data preparation and https://github.com/vesis84/kaldi-io-for-python
-   for reading data.
+ * The code Relies on Kaldi ( http://kaldi-asr.org/ ) for data preparation and
+   https://github.com/gulamungon/kaldi-io-for-python/tree/read_feature_chunk for reading data. The latter is forked from
+   https://github.com/vesis84/kaldi-io-for-python    
  * Contrary to Kaldi and most other toolkits, we don't prepare minibatches in advance and put them in archives. Instead,
    we create minibatches on-the-fly and read the features at that times. THIS ONLY WORKS IF FEATUREAS ARE STORED ON SSD.
  * Most code supports having segments of different length within a minibatch. This can be useful for end-to-end style training
